@@ -1,15 +1,24 @@
-import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google"
+import { ClerkProvider } from "@clerk/nextjs"
+import { shadcn } from "@clerk/ui/themes"
+import { Cormorant_Garamond, Jost } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
-const fontSans = Geist({
+const fontSans = Jost({
   subsets: ["latin"],
+  weight: ["200", "300", "400", "500"],
   variable: "--font-sans",
 })
 
-const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-mono'})
+const fontSerif = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+})
 
 export default function RootLayout({
   children,
@@ -20,10 +29,14 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontSans.variable, "font-mono", jetbrainsMono.variable)}
+      className={cn("antialiased", fontSans.variable, fontSerif.variable)}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ClerkProvider appearance={{ theme: shadcn }}>
+          <ThemeProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   )
