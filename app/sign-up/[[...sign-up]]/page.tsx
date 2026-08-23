@@ -108,7 +108,7 @@ function AcceptInvitation() {
             alt="Q2 Capital Partners"
             className="mb-3.5 h-10 w-auto"
           />
-          <div className="text-[9px] tracking-[0.12em] text-muted-foreground uppercase">
+          <div className="text-2xs tracking-label text-muted-foreground uppercase">
             Investor Portal
           </div>
         </div>
@@ -132,7 +132,7 @@ function AcceptInvitation() {
               <div className="flex-1">
                 <label
                   htmlFor="firstName"
-                  className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                  className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
                 >
                   First Name
                 </label>
@@ -148,7 +148,7 @@ function AcceptInvitation() {
                   className="w-full border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none"
                 />
                 {errors?.fields?.firstName && (
-                  <p className="mt-1 text-[10px] text-destructive">
+                  <p className="mt-1 text-2xs text-destructive">
                     {errors.fields.firstName.message}
                   </p>
                 )}
@@ -156,7 +156,7 @@ function AcceptInvitation() {
               <div className="flex-1">
                 <label
                   htmlFor="lastName"
-                  className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                  className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
                 >
                   Last Name
                 </label>
@@ -172,7 +172,7 @@ function AcceptInvitation() {
                   className="w-full border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none"
                 />
                 {errors?.fields?.lastName && (
-                  <p className="mt-1 text-[10px] text-destructive">
+                  <p className="mt-1 text-2xs text-destructive">
                     {errors.fields.lastName.message}
                   </p>
                 )}
@@ -181,7 +181,7 @@ function AcceptInvitation() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
               >
                 Password
               </label>
@@ -207,20 +207,20 @@ function AcceptInvitation() {
                 </button>
               </div>
               {errors?.fields?.password && (
-                <p className="mt-1 text-[10px] text-destructive">
+                <p className="mt-1 text-2xs text-destructive">
                   {errors.fields.password.message}
                 </p>
               )}
             </div>
             {errors?.global && errors.global.length > 0 && (
-              <p className="text-[10px] text-destructive">
+              <p className="text-2xs text-destructive">
                 {errors.global[0].message}
               </p>
             )}
             <button
               type="submit"
               disabled={fetchStatus === "fetching"}
-              className="bg-primary py-3.5 text-xs font-bold tracking-[0.22em] text-primary-foreground uppercase disabled:opacity-50"
+              className="bg-primary py-3.5 text-xs font-bold tracking-loud text-primary-foreground uppercase disabled:opacity-50"
             >
               Activate Account →
             </button>
@@ -231,7 +231,7 @@ function AcceptInvitation() {
               Completing your invitation…
             </p>
             {errors?.global && errors.global.length > 0 && (
-              <p className="text-[10px] text-destructive">
+              <p className="text-2xs text-destructive">
                 {errors.global[0].message}
               </p>
             )}

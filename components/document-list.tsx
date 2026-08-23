@@ -7,8 +7,6 @@ import {
   FileXlsIcon,
 } from "@phosphor-icons/react/dist/ssr"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import type { InvestorDocument } from "@/lib/documents"
 
 const fileIcons: Record<string, typeof FilePdfIcon> = {
@@ -26,37 +24,39 @@ export function DocumentList({
 }: {
   documents: InvestorDocument[]
 }) {
+  if (documents.length === 0) {
+    return <p className="text-sm text-muted-foreground">No documents yet.</p>
+  }
+
   return (
-    <div className="flex flex-1 flex-col gap-4">
+    <div className="flex flex-col divide-y divide-border border-b border-border">
       {documents.map((document) => {
         const FileIcon = fileIcons[document.fileType] ?? FileTextIcon
 
         return (
-          <Card key={document.id}>
-            <CardContent className="flex flex-row items-center gap-3">
-              <FileIcon className="size-8 shrink-0 text-muted-foreground" />
-              <div className="flex flex-1 flex-col gap-1">
-                <CardTitle>{document.title}</CardTitle>
-                <CardDescription>
-                  {document.category} ·{" "}
-                  {new Date(document.uploadedAt).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}{" "}
-                  · {document.fileSize}
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                render={<a href={document.url} download />}
-              >
-                <DownloadIcon data-icon="inline-start" />
-                Download
-              </Button>
-            </CardContent>
-          </Card>
+          <a
+            key={document.id}
+            href={document.url}
+            download
+            className="group flex items-center gap-3 px-3 py-3 transition-colors hover:bg-accent/40"
+          >
+            <FileIcon className="size-6 shrink-0 text-muted-foreground" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-sm font-medium text-foreground">
+                {document.title}
+              </span>
+              <span className="text-2xs text-muted-foreground">
+                {document.category} ·{" "}
+                {new Date(document.uploadedAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}{" "}
+                · {document.fileSize}
+              </span>
+            </div>
+            <DownloadIcon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+          </a>
         )
       })}
     </div>

@@ -9,7 +9,7 @@ export default async function DocumentsPage() {
   ])
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
       <Tabs defaultValue="documents">
         <TabsList>
           <TabsTrigger value="documents">Documents</TabsTrigger>

@@ -74,11 +74,13 @@ INVESTOR_PORTAL_URL=http://localhost:3000
 
 ### Content-type model
 
-- **`account`** — the sharing/ownership boundary (a company). `name`, `accessCategories` (JSON array — deliberately not Strapi's native `enumeration`, which is single-value only), and `oneToMany` relations out to `users`, `investments`, `documents`, `portfolioReports`, `properties`, `invitations`.
-- **`project`** — a shared/global entity. **No account relation.** `draftAndPublish: false`. Lifecycle phase field is named **`phase`**, not `status` (see gotcha below).
-- **`investment`** — the join between `project` and `account`, carrying per-account numbers (`targetRoi`, `totalBudget`, `costToDate` — kept as pre-formatted strings, e.g. `"$52.1M"`, matching how the frontend already renders them). Has a `beforeCreate` lifecycle guard against duplicate rows for the same project+account pair.
+- **`account`** — the sharing/ownership boundary (a company). `name`, `accessCategories` (JSON array — deliberately not Strapi's native `enumeration`, which is single-value only), and `oneToMany` relations out to `users`, `documents`, `portfolioReports`, `properties`, `invitations`.
+- **`project`** — a shared real-estate development update, **visible to every logged-in investor** (like News — no account relation, no scoping policy on its routes at all). Holds `name`, `subtitle`, `phase` (enum — named `phase`, not `status`, see gotcha below), `progress`, `highlight`, `description` (richtext), and `targetRoi`/`totalBudget`/`costToDate` (pre-formatted strings, e.g. `"$52.1M"`) directly on the record.
+
+  **History**: this used to be split across `project` (shared fields) and a separate `investment` join content-type (per-account `targetRoi`/`totalBudget`/`costToDate`, `manyToOne` to both `project` and `account`), scoped by a dedicated `is-project-linked-to-account` policy. That model was removed — Projects turned out to be a broadcast update every investor should see, not per-account data — so the numeric fields moved directly onto `project`, the `investment` content-type and its policy were deleted outright, and `project`'s routes became a plain `factories.createCoreRouter()` with no policies (matching `news-article`). If you're replicating this pattern in a new project, don't assume a "shared entity with per-account numbers" always needs a join table — confirm whether the numbers are genuinely per-account before building one.
 - **`document`**, **`portfolio-report`**, **`property`** — straightforward `manyToOne` (`required: true`) to `account`. Each scoped by the same list/detail policy pair (see below). `property`'s field is named **`paymentStatus`**, not `status` (see gotcha below). `document.category` is a required enum (Annual Report/Project Report/Progress Report/LP Agreement/Loan Agreement/Tax Slip/**Portfolio Report**); `document.fileType` is a required enum (PDF/PPT/XLS/CSV/ZIP/VIDEO/OTHER), not a free-text string — no separate `uploadedAt` field, since Strapi's automatic `createdAt` already covers that (the frontend mapper reads `createdAt`, not a custom timestamp).
 - **`invitation`** — `email`, `first_name`, `last_name`, `account` (`manyToOne`), `role` (enum: investor/admin), `invitation_status` (enum: pending/accepted/revoked/expired), `clerk_invitation_id`, `invitation_url`, `invited_at`, `invitation_expires_at`, `accepted_at`, `accepted_by_user` (`oneToOne` → user).
+- **`investment-opportunity`** / **`interest-registration`** — shared broadcast + account-scoped submission pair backing "Register Interest." See [Investment opportunities + interest registration](#investment-opportunities--interest-registration) below for the full write-up, including why `interest-registration`'s `create` action is a full controller override rather than a policy.
 - **`plugin::users-permissions.user` extension** — add `clerk_id` (string, required, unique), `first_name`, `last_name`, `account` (`manyToOne`), `invitation` (`oneToOne`, mappedBy `accepted_by_user`). Must include the **entire** stock schema in the extension file, not just the diff — Strapi doesn't merge partial overrides for this plugin. Copy the base from the installed package if you don't already have an extension file:
   ```bash
   cat node_modules/@strapi/plugin-users-permissions/dist/server/content-types/user/index.js
@@ -198,27 +200,9 @@ export default async (ctx: any, config: { uid: string }, { strapi }: { strapi: a
 };
 ```
 
-`src/policies/is-project-linked-to-account.ts` (Project is shared, so scope via the Investment join instead of blocking outright; distinguishes list vs. detail by the presence of `ctx.params.id`):
-```ts
-export default async (ctx: any, config: unknown, { strapi }: { strapi: any }) => {
-  const account = ctx.state.user?.account;
-  if (!account) return false;
+**`project` has no scoping policy at all** — removed along with the `investment` join content-type (see the content-type model section above). Its router is a plain `factories.createCoreRouter('api::project.project')`, same as `news-article`/`news-category`/`resource` — read access is gated only by the Authenticated role's `find`/`findOne` permissions, not by any per-record ownership check.
 
-  if (ctx.params?.id) {
-    const linkedInvestment = await strapi.documents('api::investment.investment').findFirst({
-      filters: { project: ctx.params.id, account: account.documentId },
-    });
-    return !!linkedInvestment;
-  }
-
-  ctx.request.query.filters = {
-    $and: [ctx.request.query.filters ?? {}, { investments: { account: { documentId: { $eq: account.documentId } } } }],
-  };
-  return true;
-};
-```
-
-Wire per content-type in its `routes/*.ts`:
+Wire the account-scoping policies per content-type in its `routes/*.ts`:
 ```ts
 export default factories.createCoreRouter('api::document.document', {
   config: {
@@ -452,6 +436,72 @@ export default factories.createCoreController('api::invitation.invitation', () =
 
 Deliberately narrow: returns only two name fields (nothing else, no account info), and returns `null`s rather than 404 for a non-match so it can't double as an "is this email invited" oracle.
 
+### Investment opportunities + interest registration
+
+Two content-types, added together to back the "Register Interest" flow:
+
+- **`investment-opportunity`** — `title`, `excerpt`, `tag`, `draftAndPublish: true`. A shared broadcast, same visibility model as `project`/`news-article` (plain `factories.createCoreRouter()`, no scoping policies — every logged-in investor sees every published opportunity).
+- **`interest-registration`** — an account's indication of interest in one opportunity: `amount` (decimal), `acknowledgedCapitalCalls` (boolean, required), and `manyToOne` relations to `opportunity`, `account`, and `investorUser`. `find`/`findOne` are scoped with the same `is-account-scoped-list`/`is-account-scoped-detail` policies as Document/Property/PortfolioReport — but **`create` is not policy-scoped**, because a policy can only filter/reject, not rewrite which account a new record belongs to.
+
+**Why `create` is a full controller override, not a policy.** Document/Property/PortfolioReport records are created by an admin in the content-manager (trusted context, no client input to distrust). Interest registrations are created by the investor themselves from the portal — the request body must never be trusted for *who this belongs to*, or one investor could submit a registration on another account's behalf by editing the request. So `src/api/interest-registration/controllers/interest-registration.ts` replaces the default `create` action entirely:
+
+```ts
+export default factories.createCoreController('api::interest-registration.interest-registration', ({ strapi }) => ({
+  async create(ctx: any) {
+    const user = ctx.state.user;
+    const account = user?.account;
+    if (!account) return ctx.forbidden();
+
+    const { opportunity: opportunityDocumentId, amount, acknowledged } = ctx.request.body?.data ?? {};
+    if (!opportunityDocumentId || typeof amount !== 'number' || amount <= 0) {
+      return ctx.badRequest('A positive amount and opportunity are required');
+    }
+    if (acknowledged !== true) {
+      return ctx.badRequest('Acknowledgement of capital call terms is required');
+    }
+
+    const opportunity = await strapi.documents('api::investment-opportunity.investment-opportunity')
+      .findOne({ documentId: opportunityDocumentId });
+    if (!opportunity) return ctx.notFound('Opportunity not found');
+
+    // Idempotent: a second submission for an already-registered account+opportunity
+    // returns the existing record instead of creating a duplicate or re-emailing.
+    const existing = await strapi.documents('api::interest-registration.interest-registration').findFirst({
+      filters: {
+        account: { documentId: { $eq: account.documentId } },
+        opportunity: { documentId: { $eq: opportunityDocumentId } },
+      },
+    });
+    if (existing) { ctx.body = { data: existing }; return; }
+
+    const registration = await strapi.documents('api::interest-registration.interest-registration').create({
+      data: {
+        amount,
+        acknowledgedCapitalCalls: true,
+        account: account.documentId,
+        investorUser: user.documentId,
+        opportunity: opportunityDocumentId,
+      },
+    });
+
+    try {
+      await sendInterestRegistrationEmail({ /* investorName, accountName, opportunityTitle, amount */ });
+    } catch (error) {
+      // Registration is already saved — don't fail the investor's submission over a notification-email hiccup.
+      strapi.log.error('Failed to send interest registration email', error);
+    }
+
+    ctx.body = { data: registration };
+  },
+}));
+```
+
+The `investorUser`/`account` values come from `ctx.state.user` (set by the `clerk-jwt` auth strategy) — identical trust boundary to the `find`/`findOne` policies, just applied inside a controller instead of a policy because it needs to *write* a value, not just filter a query.
+
+**Required manual step (in addition to the general one above):** Authenticated role needs `find`/`findOne` checked for `investment-opportunity`, and `find`/`findOne`/**and `create`**/checked for `interest-registration` — this is the one content-type in the whole integration where Authenticated legitimately needs `create`, since investors submit these themselves rather than an admin creating them.
+
+**Email notification (`src/utils/resend.ts`) — raw fetch, not a Strapi email-plugin provider.** Checked the npm registry directly: there is **no official `@strapi/provider-email-resend`** package (the official providers are nodemailer/sendgrid/mailgun/amazon-ses/sendmail only). The community Resend providers that do exist are unofficial and largely unmaintained. Rather than take that dependency, `sendInterestRegistrationEmail()` does a plain `fetch('https://api.resend.com/emails', ...)` with `Authorization: Bearer ${RESEND_API_KEY}` — the same "raw fetch to the vendor's REST API" pattern already used for Clerk invitations (`src/api/invitation/services/invitation.ts`), rather than introducing a second dependency-management style for external services. Confirmed current via Resend's docs: `POST /emails` with `{ from, to, subject, html }`, bearer auth. Requires `RESEND_API_KEY` and `RESEND_FROM_EMAIL` (`.env`) — `RESEND_FROM_EMAIL`'s domain must be verified in the Resend account or sends fail. `INTEREST_NOTIFICATION_EMAIL` defaults to `info@east97.ca` in code if unset. If either env var is missing, the util logs a warning and skips the send (doesn't throw) — the registration record is the source of truth and is always saved regardless of email outcome.
+
 ---
 
 ## Frontend (Next.js, App Router)
@@ -527,11 +577,11 @@ export async function getProperties(): Promise<Property[]> {
 }
 ```
 
-For a shared/joined resource (Project ↔ Investment), fetch the join and map from it — `lib/projects.ts`:
+For a fully global/unscoped resource (no account relation, no policy) — `lib/projects.ts`:
 ```ts
 export async function getProjects(): Promise<Project[]> {
-  const investments = await strapiFetch<StrapiInvestment[]>("/investments?populate=project")
-  return investments.map(mapInvestment) // combines investment's per-account numbers + project's shared fields
+  const projects = await strapiFetch<StrapiProject[]>("/projects")
+  return projects.map(mapProject)
 }
 ```
 
