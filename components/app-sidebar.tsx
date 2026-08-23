@@ -4,6 +4,7 @@ import { PrimaryNav } from "@/components/primary-nav"
 import { SearchForm } from "@/components/search-form"
 import { SideNavInvestor } from "@/components/side-nav-investor"
 import { VersionSwitcher } from "@/components/version-switcher"
+import { getProperties } from "@/lib/properties"
 import {
   Sidebar,
   SidebarContent,
@@ -149,7 +150,11 @@ const data = {
     },
   ],
 }
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export async function AppSidebar({
+  ...props
+}: React.ComponentProps<typeof Sidebar>) {
+  const properties = await getProperties()
+
   return (
     <Sidebar {...props}>
       <SidebarHeader>
@@ -171,7 +176,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
           
 
-        <PrimaryNav />
+        <PrimaryNav properties={properties} />
 
         {/* {data.navMain.map((item) => (
           <SidebarGroup key={item.title}>

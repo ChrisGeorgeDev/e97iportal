@@ -1,4 +1,6 @@
 import { strapiFetch } from "@/lib/strapi/client"
+import { formatFileSize, toAbsoluteMediaUrl } from "@/lib/strapi/media"
+import { getResources } from "@/lib/resources"
 
 export type InvestorDocument = {
   id: string
@@ -24,17 +26,6 @@ type StrapiDocument = {
   file: StrapiMediaFile | null
 }
 
-const STRAPI_URL = process.env.STRAPI_URL
-
-function formatFileSize(sizeInKb: number): string {
-  if (sizeInKb < 1024) return `${Math.round(sizeInKb)} KB`
-  return `${(sizeInKb / 1024).toFixed(1)} MB`
-}
-
-function toAbsoluteUrl(url: string): string {
-  return url.startsWith("http") ? url : `${STRAPI_URL}${url}`
-}
-
 function mapDocument(doc: StrapiDocument): InvestorDocument {
   return {
     id: doc.documentId,
@@ -44,7 +35,7 @@ function mapDocument(doc: StrapiDocument): InvestorDocument {
     // to match the icon lookup keys in components/document-list.tsx.
     fileType: doc.fileType.toLowerCase(),
     fileSize: doc.file ? formatFileSize(doc.file.size) : "",
-    url: doc.file ? toAbsoluteUrl(doc.file.url) : "#",
+    url: doc.file ? toAbsoluteMediaUrl(doc.file.url) : "#",
     // uploadedAt was a redundant custom field — Strapi already tracks this
     // via its automatic createdAt timestamp.
     uploadedAt: doc.createdAt,
@@ -56,9 +47,9 @@ export async function getDocuments(): Promise<InvestorDocument[]> {
   return documents.map(mapDocument)
 }
 
-// Resources are meant to be attachments on news/blog posts (see AGENTS.md
-// TODO) rather than this Document content-type. That relation doesn't exist
-// yet, so this stays an empty gap until it's designed.
+// Resource is a shared/global content-type (no account relation) — every
+// logged-in investor sees the same list here, not just resources attached
+// to news they've read.
 export async function getResourceDocuments(): Promise<InvestorDocument[]> {
-  return []
+  return getResources()
 }

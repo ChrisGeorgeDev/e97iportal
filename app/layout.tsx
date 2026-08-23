@@ -9,13 +9,17 @@ import { cn } from "@/lib/utils"
 
 const fontSans = Jost({
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500"],
+  // Variable font: covers the full 100-900 weight axis in one file, so
+  // font-semibold/font-bold render with real glyphs instead of the browser's
+  // synthetic/faux bold (the previous static weight list topped out at 500).
+  weight: "variable",
   variable: "--font-sans",
 })
 
 const fontSerif = Cormorant_Garamond({
   subsets: ["latin"],
-  weight: ["300", "400", "500"],
+  // Same reasoning as fontSans — real 600 weight for font-heading + font-semibold.
+  weight: "variable",
   style: ["normal", "italic"],
   variable: "--font-serif",
 })

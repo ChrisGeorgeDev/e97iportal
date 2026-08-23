@@ -66,7 +66,7 @@ export default function SignInPage() {
             alt="Q2 Capital Partners"
             className="mb-3.5 h-10 w-auto"
           />
-          <div className="text-[9px] tracking-[0.12em] text-muted-foreground uppercase">
+          <div className="text-2xs tracking-label text-muted-foreground uppercase">
             Investor Portal
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function SignInPage() {
             <div>
               <label
                 htmlFor="code"
-                className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
               >
                 Verification Code
               </label>
@@ -95,20 +95,20 @@ export default function SignInPage() {
                 className="w-full border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none"
               />
               {errors?.fields?.code && (
-                <p className="mt-1 text-[10px] text-destructive">
+                <p className="mt-1 text-2xs text-destructive">
                   {errors.fields.code.message}
                 </p>
               )}
             </div>
             {errors?.global && errors.global.length > 0 && (
-              <p className="text-[10px] text-destructive">
+              <p className="text-2xs text-destructive">
                 {errors.global[0].message}
               </p>
             )}
             <button
               type="submit"
               disabled={fetchStatus === "fetching"}
-              className="bg-primary py-3.5 text-xs font-bold tracking-[0.22em] text-primary-foreground uppercase disabled:opacity-50"
+              className="bg-primary py-3.5 text-xs font-bold tracking-loud text-primary-foreground uppercase disabled:opacity-50"
             >
               Verify →
             </button>
@@ -121,7 +121,7 @@ export default function SignInPage() {
             <div>
               <label
                 htmlFor="email"
-                className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
               >
                 Email Address
               </label>
@@ -133,7 +133,7 @@ export default function SignInPage() {
                 className="w-full border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none"
               />
               {errors?.fields?.identifier && (
-                <p className="mt-1 text-[10px] text-destructive">
+                <p className="mt-1 text-2xs text-destructive">
                   {errors.fields.identifier.message}
                 </p>
               )}
@@ -141,7 +141,7 @@ export default function SignInPage() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-1.5 block text-[9px] tracking-[0.12em] text-muted-foreground uppercase"
+                className="mb-1.5 block text-2xs tracking-label text-muted-foreground uppercase"
               >
                 Password
               </label>
@@ -167,20 +167,20 @@ export default function SignInPage() {
                 </button>
               </div>
               {errors?.fields?.password && (
-                <p className="mt-1 text-[10px] text-destructive">
+                <p className="mt-1 text-2xs text-destructive">
                   {errors.fields.password.message}
                 </p>
               )}
             </div>
             {errors?.global && errors.global.length > 0 && (
-              <p className="text-[10px] text-destructive">
+              <p className="text-2xs text-destructive">
                 {errors.global[0].message}
               </p>
             )}
             <button
               type="submit"
               disabled={fetchStatus === "fetching"}
-              className="bg-primary py-3.5 text-xs font-bold tracking-[0.22em] text-primary-foreground uppercase disabled:opacity-50"
+              className="bg-primary py-3.5 text-xs font-bold tracking-loud text-primary-foreground uppercase disabled:opacity-50"
             >
               Sign In →
             </button>
