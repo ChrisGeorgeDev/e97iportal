@@ -256,7 +256,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, toggleSidebar } = useSidebar()
 
   return (
     <Button
@@ -264,7 +264,7 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon-sm"
-      className={cn(className)}
+      className={cn(isMobile && "size-11 [&_svg]:size-5", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -514,7 +514,11 @@ function SidebarMenuButton({
     defaultTagName: "button",
     props: mergeProps<"button">(
       {
-        className: cn(sidebarMenuButtonVariants({ variant, size }), className),
+        className: cn(
+          sidebarMenuButtonVariants({ variant, size }),
+          isMobile && "h-11 gap-3 px-3 text-base [&_svg]:size-5",
+          className
+        ),
       },
       props
     ),

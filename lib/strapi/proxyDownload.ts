@@ -27,14 +27,32 @@ export async function proxyStrapiDownload(
     return new NextResponse(null, { status: 400 })
   }
 
-  const authHeader = await getStrapiAuthHeader()
+  let authHeader: HeadersInit
+  try {
+    authHeader = await getStrapiAuthHeader()
+  } catch (error) {
+    console.error(`[proxyStrapiDownload] ${collection}/${documentId}: failed to get auth header`, error)
+    return new NextResponse("Not authenticated", { status: 401 })
+  }
+
   const res = await fetch(`${STRAPI_URL}/api/${collection}/${documentId}/download`, {
     headers: authHeader,
     cache: "no-store",
   })
 
   if (!res.ok || !res.body) {
-    return new NextResponse(null, { status: res.status })
+    // Surface Strapi's actual error instead of swallowing it — an empty,
+    // untyped body is what made failures show up in the browser as a
+    // mysterious "download.txt" with no indication of what went wrong.
+    const body = await res.text().catch(() => "")
+    console.error(
+      `[proxyStrapiDownload] ${collection}/${documentId}: Strapi returned ${res.status} ${res.statusText}`,
+      body
+    )
+    return new NextResponse(body || res.statusText, {
+      status: res.status,
+      headers: { "Content-Type": res.headers.get("content-type") ?? "text/plain" },
+    })
   }
 
   const headers: HeadersInit = {

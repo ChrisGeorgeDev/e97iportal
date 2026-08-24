@@ -127,9 +127,26 @@
     --sidebar-ring: #c9a96e;
 }
 
+/* iOS Safari auto-zooms the viewport when a focused field's font-size is
+   under 16px, and won't zoom back out on blur. The design system's inputs
+   use text-xs (12px), so force 16px on mobile widths only, where the zoom
+   bug actually applies — desktop keeps the compact size. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    }
+  html {
+    /* Prevents double-tap-to-zoom on mobile browsers without disabling
+       pinch-zoom (unlike user-scalable=no, which would harm accessibility). */
+    touch-action: manipulation;
     }
   body {
     @apply bg-background text-foreground;
