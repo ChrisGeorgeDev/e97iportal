@@ -1,6 +1,6 @@
 import type { InvestorDocument } from "@/lib/documents"
 import { strapiFetch } from "@/lib/strapi/client"
-import { formatFileSize, toAbsoluteMediaUrl } from "@/lib/strapi/media"
+import { formatFileSize } from "@/lib/strapi/media"
 
 type StrapiMediaFile = {
   url: string
@@ -23,7 +23,7 @@ export function mapResource(resource: StrapiResource): InvestorDocument {
     category: resource.category,
     fileType: resource.fileType.toLowerCase(),
     fileSize: resource.file ? formatFileSize(resource.file.size) : "",
-    url: resource.file ? toAbsoluteMediaUrl(resource.file.url) : "#",
+    url: resource.file ? `/api/resources/${resource.documentId}/download` : "#",
     uploadedAt: resource.createdAt,
   }
 }

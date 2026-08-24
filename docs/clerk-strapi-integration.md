@@ -74,11 +74,15 @@ INVESTOR_PORTAL_URL=http://localhost:3000
 
 ### Content-type model
 
-- **`account`** — the sharing/ownership boundary (a company). `name`, `accessCategories` (JSON array — deliberately not Strapi's native `enumeration`, which is single-value only), and `oneToMany` relations out to `users`, `documents`, `portfolioReports`, `properties`, `invitations`.
+- **`account`** — the sharing/ownership boundary (a company). `name`, `e97ID` (string, `required` + `unique` — the company's own external tracking ID for this account, distinct from Strapi's `id`/`documentId`; enforced via Strapi's native schema-level `unique: true`, no custom validation needed), `accountCategories` (`manyToMany` → `account-category`, the owning side — mirrors `newsArticles.newsCategories`), and `oneToMany` relations out to `users`, `documents`, `portfolioReports`, `properties`, `invitations`.
+
+  **History**: `accountCategories` used to be a `json` array of hardcoded strings (`INVESTOR`/`OWNER`/`LENDER`) — deliberately not Strapi's native `enumeration`, since that's single-value only. Replaced with a real `account-category` content-type (`title`, `badgeVariant` enum matching the frontend `Badge` component's color variants) once it became clear the category list needed to be admin-extensible, not fixed at exactly three — same reasoning and shape as `news-category`. The badge's display color now lives on the category record itself (`badgeVariant`), not in a frontend lookup table keyed by a closed set of names — adding a new category needs zero frontend code changes. Frontend reads it via a **nested populate** (`lib/account.ts`'s `getMyAccount()`: `/users/me?populate[account][populate]=accountCategories` — populate is shallow by default, so the flat `?populate=account` used before this change never returned the category relation's own fields).
 - **`project`** — a shared real-estate development update, **visible to every logged-in investor** (like News — no account relation, no scoping policy on its routes at all). Holds `name`, `subtitle`, `phase` (enum — named `phase`, not `status`, see gotcha below), `progress`, `highlight`, `description` (richtext), and `targetRoi`/`totalBudget`/`costToDate` (pre-formatted strings, e.g. `"$52.1M"`) directly on the record.
 
   **History**: this used to be split across `project` (shared fields) and a separate `investment` join content-type (per-account `targetRoi`/`totalBudget`/`costToDate`, `manyToOne` to both `project` and `account`), scoped by a dedicated `is-project-linked-to-account` policy. That model was removed — Projects turned out to be a broadcast update every investor should see, not per-account data — so the numeric fields moved directly onto `project`, the `investment` content-type and its policy were deleted outright, and `project`'s routes became a plain `factories.createCoreRouter()` with no policies (matching `news-article`). If you're replicating this pattern in a new project, don't assume a "shared entity with per-account numbers" always needs a join table — confirm whether the numbers are genuinely per-account before building one.
-- **`document`**, **`portfolio-report`**, **`property`** — straightforward `manyToOne` (`required: true`) to `account`. Each scoped by the same list/detail policy pair (see below). `property`'s field is named **`paymentStatus`**, not `status` (see gotcha below). `document.category` is a required enum (Annual Report/Project Report/Progress Report/LP Agreement/Loan Agreement/Tax Slip/**Portfolio Report**); `document.fileType` is a required enum (PDF/PPT/XLS/CSV/ZIP/VIDEO/OTHER), not a free-text string — no separate `uploadedAt` field, since Strapi's automatic `createdAt` already covers that (the frontend mapper reads `createdAt`, not a custom timestamp).
+- **`document`**, **`portfolio-report`**, **`property`** — straightforward `manyToOne` (`required: true`) to `account`. Each scoped by the same list/detail policy pair (see below). `document.category` is a required enum (Annual Report/Project Report/Progress Report/LP Agreement/Loan Agreement/Tax Slip/**Portfolio Report**); `document.fileType` is a required enum (PDF/PPT/XLS/CSV/ZIP/VIDEO/OTHER), not a free-text string — no separate `uploadedAt` field, since Strapi's automatic `createdAt` already covers that (the frontend mapper reads `createdAt`, not a custom timestamp).
+
+  **`property` was simplified down to just `address`, `portalUrl` (both `required`), and `account`.** Originally also had `tenant`/`rent`/`paymentMethod`/`paymentStatus` (named that, not `status` — see gotcha below, now moot since the field is gone)/`managedBy`, but once the standalone `/dashboard/property` page was removed in favor of a sidebar nav link (`components/primary-nav.tsx` — a plain external link when there's one Property, an expandable group of them when there's more than one), those fields had no remaining reader anywhere in the frontend. Confirmed via grep before removing them. `portalUrl` is `required` now specifically because a Property record with no URL can't produce a working nav link — the whole point of the content-type today.
 - **`invitation`** — `email`, `first_name`, `last_name`, `account` (`manyToOne`), `role` (enum: investor/admin), `invitation_status` (enum: pending/accepted/revoked/expired), `clerk_invitation_id`, `invitation_url`, `invited_at`, `invitation_expires_at`, `accepted_at`, `accepted_by_user` (`oneToOne` → user).
 - **`investment-opportunity`** / **`interest-registration`** — shared broadcast + account-scoped submission pair backing "Register Interest." See [Investment opportunities + interest registration](#investment-opportunities--interest-registration) below for the full write-up, including why `interest-registration`'s `create` action is a full controller override rather than a policy.
 - **`plugin::users-permissions.user` extension** — add `clerk_id` (string, required, unique), `first_name`, `last_name`, `account` (`manyToOne`), `invitation` (`oneToOne`, mappedBy `accepted_by_user`). Must include the **entire** stock schema in the extension file, not just the diff — Strapi doesn't merge partial overrides for this plugin. Copy the base from the installed package if you don't already have an extension file:
@@ -116,7 +120,11 @@ Why `verifyToken()` and not the more-recommended `authenticateRequest()`: the la
 
 ```ts
 import type { Core } from '@strapi/strapi';
+import { errors } from '@strapi/utils';
+
 import { verifyClerkSessionToken } from './utils/clerk-verify';
+
+const { ForbiddenError, UnauthorizedError } = errors;
 
 export default {
   register({ strapi }: { strapi: Core.Strapi }) {
@@ -145,7 +153,7 @@ export default {
 
         // Generate the same ability/permissions object the built-in
         // users-permissions strategy would, so role-based permission
-        // checks (Settings → Roles → Authenticated) still apply.
+        // checks (Settings → Roles → Authenticated) can be enforced by verify() below.
         const permissionService = strapi.plugin('users-permissions').service('permission');
         const permissions = await permissionService
           .findRolePermissions(user.role.id)
@@ -155,6 +163,23 @@ export default {
         ctx.state.user = user;
         return { authenticated: true, credentials: user, ability };
       },
+
+      // Without this, Strapi's core authService.verify() silently no-ops for
+      // every request authenticated by this strategy — it only calls
+      // strategy.verify() if the strategy defines one (@strapi/core's
+      // services/auth/index.js). Mirrors the official content-api-token
+      // strategy's verify() (@strapi/admin's strategies/content-api-token.js).
+      verify: async (auth: any, config: any) => {
+        const { credentials: user, ability } = auth;
+        if (!user) throw new UnauthorizedError();
+        if (!config?.scope) return;
+
+        if (!ability) throw new ForbiddenError();
+        const scopes = Array.isArray(config.scope) ? config.scope : [config.scope];
+        if (!scopes.every((scope: string) => ability.can(scope))) {
+          throw new ForbiddenError();
+        }
+      },
     });
   },
   bootstrap() {},
@@ -163,7 +188,11 @@ export default {
 
 This registers **alongside** Strapi's built-in `users-permissions` strategy (`strapi.get('auth').register('content-api', authStrategy)` — confirmed by reading the plugin's own `register.js`), it doesn't replace it. Both are tried per-request; ours wins whenever a valid Clerk bearer token is present.
 
-**Required manual step:** the Authenticated role still needs `find`/`findOne` explicitly checked in **Settings → Users & Permissions → Roles → Authenticated** for every scoped content-type, because our strategy generates its ability from that same role's permission set. Leave `create`/`update`/`delete` unchecked (admin-only, done through the admin panel, not the content API). Without this step, a validly-authenticated request still 403s.
+**Gotcha — a strategy with no `verify()` silently disables the entire permission-checkbox system for every request it authenticates.** This shipped as a real bug: the strategy above originally had no `verify()` at all, and it went unnoticed for a while because the `authenticate()` function was already (correctly) building the `ability` object and comments even said permission checks "still apply" — but nothing ever consulted that `ability`. `@strapi/core`'s `authService.verify(auth, config)` only calls `auth.strategy.verify(auth, config)` if the strategy actually defines one (`typeof auth.strategy.verify === 'function'`); if not, it's a silent no-op and the request proceeds regardless of what's checked in Settings → Users & Permissions → Roles. This affects **every action, core or custom** — not just custom ones — since `@strapi/core`'s `register-routes.js` auto-generates a required `scope` (e.g. `api::document.document.find`, `api::document.document.download`) for every content-api route uniformly, whether it came from `factories.createCoreRouter()` or a hand-written custom route file. The only things that actually gated access before this fix were whatever *policies* were explicitly attached (e.g. `is-account-scoped-detail`) — the Authenticated-role checkboxes themselves were cosmetic. Confirmed the fix against the real `verify()` call site (`@strapi/core/dist/services/server/compose-endpoint.js`) and the official reference implementation (`content-api-token.js`, above) before shipping it — don't trust a strategy object's shape from memory; a `content-api` auth strategy needs both `authenticate` and `verify` to actually enforce anything.
+
+**Gotcha — this same `ability` check applies separately, and recursively, to every populated relation, not just the route being called.** After the `verify()` fix above, `account.accountCategories` stopped showing up in `/api/users/me`'s response even though `account.name` populated fine and the DB relation was correctly linked. Root cause traced to `@strapi/utils`'s `removeRestrictedRelations` sanitizer (wired into `sanitizeOutput`, which the `users-permissions` plugin's `me` controller calls with the same `auth` object the strategy produced): for **every** relation attribute, at **every** populate depth, it independently checks `ability.can('<related-content-type-uid>.find')` and strips the field if that throws — completely separate from whatever scope check the primary route (`/api/users/me`) itself required. So populating a nested relation through an already-authorized parent resource does **not** implicitly grant read access to that related content-type; each one needs its own `find` (and `findOne`, if ever fetched singly) checked for the Authenticated role, same as if it were queried directly. This was the same underlying no-op before the `verify()` fix (the sanitizer's `ability.can()` check also silently passed), so it's a second, independent symptom of the same root bug, not a new one — worth checking for on any other nested-populated relation in this integration, not just this one.
+
+**Required manual step:** the Authenticated role still needs `find`/`findOne` explicitly checked in **Settings → Users & Permissions → Roles → Authenticated** for every scoped content-type — and, now that `verify()` actually enforces this, it's worth re-confirming every checkbox this project relies on is genuinely set, not just assumed from an earlier test (see the `AGENTS.md` TODO this bug generated — a couple of them, checked before the fix, turned out not to actually be set). Leave `create`/`update`/`delete` unchecked (admin-only, done through the admin panel, not the content API). Without the checkbox genuinely set, a validly-authenticated request now correctly 403s.
 
 ### Account-scoping policies (`src/policies/`)
 
@@ -502,6 +531,51 @@ The `investorUser`/`account` values come from `ctx.state.user` (set by the `cler
 
 **Email notification (`src/utils/resend.ts`) — raw fetch, not a Strapi email-plugin provider.** Checked the npm registry directly: there is **no official `@strapi/provider-email-resend`** package (the official providers are nodemailer/sendgrid/mailgun/amazon-ses/sendmail only). The community Resend providers that do exist are unofficial and largely unmaintained. Rather than take that dependency, `sendInterestRegistrationEmail()` does a plain `fetch('https://api.resend.com/emails', ...)` with `Authorization: Bearer ${RESEND_API_KEY}` — the same "raw fetch to the vendor's REST API" pattern already used for Clerk invitations (`src/api/invitation/services/invitation.ts`), rather than introducing a second dependency-management style for external services. Confirmed current via Resend's docs: `POST /emails` with `{ from, to, subject, html }`, bearer auth. Requires `RESEND_API_KEY` and `RESEND_FROM_EMAIL` (`.env`) — `RESEND_FROM_EMAIL`'s domain must be verified in the Resend account or sends fail. `INTEREST_NOTIFICATION_EMAIL` defaults to `info@east97.ca` in code if unset. If either env var is missing, the util logs a warning and skips the send (doesn't throw) — the registration record is the source of truth and is always saved regardless of email outcome.
 
+### Azure Blob Storage upload provider (`config/plugins.ts`)
+
+`e97-api`'s upload provider is **`strapi-provider-upload-azure-sa`** — Strapi ships no official Azure provider, and this is the only community one worth using (checked the npm registry directly: latest `0.0.3`, Dec 2024, small/lightly-maintained, chosen deliberately anyway). Configured with `AZURE_STORAGE_ACCOUNT`/`AZURE_STORAGE_ACCOUNT_KEY`/`AZURE_STORAGE_CONTAINER` (`.env`) — shared-key auth, not `AZURE_STORAGE_SAS_TOKEN` (that mode exists in the provider but wasn't chosen; see the tradeoff below). Live and confirmed working: real files upload through Strapi admin and render correctly (content-type is set from `file.mime` on every upload, checked in `strapi-provider-upload-azure-sa`'s own source).
+
+**Why the container has to be private, and why that alone isn't the fix.** With shared-key auth, every `file.url` Strapi hands back is a bare, unsigned Azure blob URL (`file.url = client.url` — checked the provider's `src/upload.ts`/`src/azure-client.ts` directly). If the container allows anonymous reads, that URL works forever for anyone who has it — a public marketing asset is fine with that, but Document/PortfolioReport/Resource are investor data and are not. The Azure Storage container (and, as a belt-and-suspenders account-level setting, "Allow Blob public access") were switched to **private** for this reason. That alone isn't sufficient on its own, though — it just means the bare URL now 403s. Something still has to serve the bytes to a legitimate, authenticated request. That's the proxy below.
+
+### Protected file downloads (Document / Portfolio Report / Resource)
+
+**Goal**: the actual Azure blob URL should never reach the browser — not a public URL, not a SAS-signed one, nothing copyable/bookmarkable/shareable outside the app. Applies to all three file-serving content-types: Document and Portfolio Report (account-scoped), and Resource (global to any authenticated investor, no account relation).
+
+**Why a single Strapi route isn't enough on its own for the iframe case.** Portfolio Report renders in an `<iframe src>` on `/dashboard/portfolio/[slug]` — the iframe's `src` is a direct browser request, and browsers don't let you attach a custom `Authorization` header to it. Every other authenticated call in this app works because it's made server-side (`getStrapiAuthHeader()`); there's no equivalent for a raw browser-initiated iframe load. So there's a same-origin Next.js hop in front of Strapi's route, same as everywhere else in this app. Document/Resource use the identical shape for consistency, even though their `<a href download>` links could in principle carry a token via `fetch()` + blob URL — one pattern instead of two.
+
+```
+Browser  →  Next.js route handler        →  Strapi route handler          →  Azure Blob Storage
+(iframe/     (same-origin, forwards          (clerk-jwt auth + account-       (Azure SDK read via
+ <a href>)    the user's Clerk token           scoped policy for Document/     Strapi's own shared-key
+              server-side)                     Portfolio Report; auth-only     credential — never a
+                                                for Resource, which is          client-facing SAS)
+                                                global)
+```
+
+- **`e97-api/src/utils/azure-download.ts`** — shared backend utility (same "shared util reused across content-types" pattern as `clerk-verify.ts`/`resend.ts`), `streamAzureFileToCtx(ctx, fileUrl, { filename, disposition, contentType? })`. Builds a `BlobServiceClient` from the same `AZURE_STORAGE_ACCOUNT`/`AZURE_STORAGE_ACCOUNT_KEY` credential already used for uploads, derives the blob's path **from the stored `file.url` itself** (not reconstructed from the provider's `defaultPath`/hash naming convention, so it doesn't depend on knowing that), and streams `downloadResponse.readableStreamBody` onto `ctx.body`.
+- **Per-content-type custom routes + controller actions** — `GET /documents/:id/download`, `GET /portfolio-reports/:id/download`, `GET /resources/:id/download`. Document and Portfolio Report reuse the **existing** `global::is-account-scoped-detail` policy, same reuse pattern as their `findOne` routes — no new authorization logic written. Resource has **no scoping policy** (matches its `find`/`findOne`, which are also unscoped) but still requires normal `clerk-jwt` auth — no `auth: false`. Portfolio Report's action forces `Content-Type: text/html` + `Content-Disposition: inline` (renders in the iframe, shouldn't prompt a save dialog); Document/Resource use `attachment` with a filename built from the entry's title + the media file's extension.
+- **`e97iportal/lib/strapi/proxyDownload.ts`** — one shared helper, `proxyStrapiDownload(collection, documentId)`, used by all three Next.js Route Handlers (`app/api/documents/[documentId]/download/route.ts` etc.). Forwards the Clerk token, streams the response body + `Content-Type`/`Content-Disposition` back. `collection` is always a fixed string literal from the calling route file, never derived from the request.
+- **`documentId` validation — security review finding, fixed.** The route path was originally built by interpolating the URL's dynamic segment directly (`` `/documents/${documentId}/download` ``) — an automated security review correctly flagged this as unvalidated input flowing into a URL path (path-traversal/SSRF-shaped risk: a malformed `documentId` could redirect this same-origin, authenticated proxy at an arbitrary Strapi path). Fixed by validating `documentId` against Strapi's actual `documentId` format before it's used — confirmed via `@strapi/core`'s `transform-content-types-to-models.js`, which generates document IDs with `cuid2.createId()` (lowercase alphanumeric). `proxyStrapiDownload()` now rejects anything not matching `^[a-z0-9]{20,32}$` with a 400 before constructing the Strapi request at all, and builds the full path internally from the validated ID + a trusted collection-name literal, rather than accepting a caller-assembled path string.
+- **`lib/documents.ts`, `lib/resources.ts`, `lib/portfolio.ts`** build their `url`/`reportUrl` fields as these same-origin `/api/.../[documentId]/download` paths instead of the raw media URL. `toAbsoluteMediaUrl` was removed from `lib/strapi/media.ts` entirely once nothing called it anymore. `components/document-list.tsx` and `app/dashboard/portfolio/[slug]/page.tsx` needed **no changes** — both already just render whatever `url`/`reportUrl` they're given.
+- **Side effect**: since the iframe now points at the Next.js app's own domain, there's no cross-origin framing problem left — same-origin content is always frameable regardless of `X-Frame-Options`/CSP. The `uploads-frame-policy` middleware (see `docs/portfolio-report-html-embedding.md`) is no longer needed for this flow.
+- **Known admin-side tradeoff, accepted**: `strapi-provider-upload-azure-sa` has no admin-preview SAS logic, so Strapi's own admin content-manager thumbnails for these files may show broken images now that the container is private. Doesn't affect the investor-facing app.
+- **Required manual step**: Authenticated role needs the new `download` custom action checked for Document, Portfolio Report, and Resource (Settings → Users & Permissions → Roles → Authenticated) — same manual-permission pattern as every other content-type here.
+
+Full narrative writeup (including the options considered and why streaming was chosen over a short-lived SAS redirect) is in `docs/portfolio-report-html-embedding.md`.
+
+### Pattern for adding a genuinely public (unauthenticated) file route, if ever needed
+
+No public file requirement exists today — this is a captured reference for if/when one does, not something built.
+
+**The public/protected split lives at the app layer, not the storage layer.** Strapi's `upload` plugin config is global — one provider, one container, applied to every uploaded file regardless of content-type. There's no built-in way to route different content-types to different containers, and building that would mean forking or writing a custom upload provider — real custom code, abandoning the verified off-the-shelf package for something bespoke. Don't do that.
+
+Instead, keep the single private container as the only storage backend, and make "public" purely a matter of which download route skips authentication — reusing the exact same `streamAzureFileToCtx()` utility either way:
+
+1. A public content-type's `download` route omits the `policies` array and sets `config: { auth: false }` — the same pattern already used, live, by `src/api/invitation/routes/invitation-lookup.ts`.
+2. The container stays private throughout. The "public" route is still server-mediated through Strapi (holding the credential, controlling the route, able to log/rate-limit/revoke it) — meaningfully different from a raw public blob URL, which is a permanent, unrevocable bearer credential the moment anyone has it.
+3. On the frontend, any page consuming this public content that isn't itself behind Clerk auth can't use `strapiFetch()` as-is — it forwards a Clerk token via `getStrapiAuthHeader()`, which throws for a signed-out caller (`lib/strapi/token.ts`). That page would need a small unauthenticated fetch variant instead. Not built — no caller has needed it yet.
+4. Preferred granularity if/when this is built: **whole content-type is public or it isn't** (e.g. a dedicated public-assets content-type), not a per-record visibility flag — simpler, and matches the shape of everything else in this integration (auth is a route-level property, not a row-level one).
+
 ---
 
 ## Frontend (Next.js, App Router)
@@ -733,3 +807,4 @@ Given how much of this depends on exact library/API versions, everything above w
 - `npx tsc --noEmit` after every schema/type-touching change (catches Strapi content-type type-generation drift immediately).
 - Read the installed package's actual `.d.ts` files for any method signature you're unsure of, especially after a major version bump.
 - Check Clerk's current webhook event catalog and OpenAPI spec directly (via the `clerk-backend-api`/`clerk-webhooks` skills, or the Dashboard) before assuming an event/field/endpoint exists.
+- Same rigor applied to the Azure/email pieces: `strapi-provider-upload-azure-sa`'s and Resend's actual behavior (`file.url` signing per auth mode, Resend's current `POST /emails` shape) were confirmed by reading the installed package's source (`npm pack` + read, not just its README) and fetching Resend's live docs, respectively — not assumed. `@strapi/core`'s document-ID generator (`cuid2.createId()`) was confirmed the same way before writing the `documentId` validation regex in the download proxy.

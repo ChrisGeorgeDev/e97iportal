@@ -1,5 +1,4 @@
 import { strapiFetch, strapiFetchOptional } from "@/lib/strapi/client"
-import { toAbsoluteMediaUrl } from "@/lib/strapi/media"
 
 export type PortfolioReport = {
   slug: string
@@ -32,7 +31,7 @@ function mapReport(report: StrapiPortfolioReport): PortfolioReport {
     type: report.type,
     period: report.period ?? "",
     publishedAt: report.publishedAt ?? "",
-    reportUrl: report.report ? toAbsoluteMediaUrl(report.report.url) : "",
+    reportUrl: report.report ? `/api/portfolio-reports/${report.documentId}/download` : "",
     disclaimer: report.disclaimer ?? "",
   }
 }
