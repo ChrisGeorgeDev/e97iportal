@@ -227,11 +227,11 @@ function AcceptInvitation() {
           </form>
         ) : (
           <div className="flex flex-col gap-4 px-7 py-5.5">
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-base leading-relaxed text-muted-foreground">
               Completing your invitation…
             </p>
             {errors?.global && errors.global.length > 0 && (
-              <p className="text-2xs text-destructive">
+              <p className="text-base text-destructive">
                 {errors.global[0].message}
               </p>
             )}
