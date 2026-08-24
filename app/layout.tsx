@@ -1,11 +1,16 @@
 import { ClerkProvider } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
+import type { Metadata } from "next"
 import { Cormorant_Garamond, Jost } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+
+export const metadata: Metadata = {
+  title: "Investor Portal | Q2 Capital Partners",
+}
 
 const fontSans = Jost({
   subsets: ["latin"],
