@@ -1,5 +1,5 @@
 import { strapiFetch } from "@/lib/strapi/client"
-import { formatFileSize, toAbsoluteMediaUrl } from "@/lib/strapi/media"
+import { formatFileSize } from "@/lib/strapi/media"
 import { getResources } from "@/lib/resources"
 
 export type InvestorDocument = {
@@ -35,7 +35,7 @@ function mapDocument(doc: StrapiDocument): InvestorDocument {
     // to match the icon lookup keys in components/document-list.tsx.
     fileType: doc.fileType.toLowerCase(),
     fileSize: doc.file ? formatFileSize(doc.file.size) : "",
-    url: doc.file ? toAbsoluteMediaUrl(doc.file.url) : "#",
+    url: doc.file ? `/api/documents/${doc.documentId}/download` : "#",
     // uploadedAt was a redundant custom field — Strapi already tracks this
     // via its automatic createdAt timestamp.
     uploadedAt: doc.createdAt,

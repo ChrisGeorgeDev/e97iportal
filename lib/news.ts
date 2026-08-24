@@ -26,6 +26,7 @@ type StrapiNewsArticle = {
   excerpt: string
   body: string
   customDate: string
+  author: string | null
   newsCategories: StrapiNewsCategory[] | null
   resources?: StrapiResource[] | null
 }
@@ -36,9 +37,7 @@ function mapNewsArticle(article: StrapiNewsArticle): NewsPost {
     title: article.title,
     excerpt: article.excerpt,
     content: article.body,
-    // No author field exists on the News content-type yet — placeholder
-    // until a real byline field is added.
-    author: "Q2 Capital Partners",
+    author: article.author || "Q2 Capital Partners",
     publishedAt: article.customDate,
     categories: (article.newsCategories ?? []).map((c) => c.title),
     resources: (article.resources ?? []).map(mapResource),
