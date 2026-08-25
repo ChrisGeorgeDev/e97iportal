@@ -8,6 +8,7 @@ import {
   CaretRightIcon,
 } from "@phosphor-icons/react/dist/ssr"
 
+import { useExternalLinkPrompt } from "@/components/external-link-dialog"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -18,6 +19,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { interceptExternalLinkClick } from "@/lib/external-link"
 import type { Property } from "@/lib/properties"
 
 const linksBeforeProperty = [
@@ -33,6 +35,7 @@ const linksAfterProperty = [
 export function PrimaryNav({ properties }: { properties: Property[] }) {
   const pathname = usePathname()
   const [propertyMenuOpen, setPropertyMenuOpen] = useState(false)
+  const promptExternalLink = useExternalLinkPrompt()
 
   return (
     <SidebarGroup>
@@ -57,6 +60,9 @@ export function PrimaryNav({ properties }: { properties: Property[] }) {
                     href={properties[0].portalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(event) =>
+                      interceptExternalLinkClick(event, promptExternalLink)
+                    }
                   />
                 }
               >
@@ -86,6 +92,9 @@ export function PrimaryNav({ properties }: { properties: Property[] }) {
                         href={property.portalUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(event) =>
+                          interceptExternalLinkClick(event, promptExternalLink)
+                        }
                       >
                         <span className="truncate">{property.address}</span>
                         <ArrowSquareOutIcon className="ml-auto" />
