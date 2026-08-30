@@ -1,0 +1,31 @@
+# Exported from Render on 2026-08-30T18:35:23Z
+version: "1"
+projects:
+- name: Inv Portal
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: e97iportal
+      runtime: node
+      repo: https://github.com/ChrisGeorgeDev/e97iportal
+      plan: free
+      envVars:
+      - key: STRAPI_URL
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        sync: false
+      region: virginia
+      buildCommand: npm install; npm run build
+      startCommand: npm run start
+      autoDeployTrigger: commit
